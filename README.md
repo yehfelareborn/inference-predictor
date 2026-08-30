@@ -6,17 +6,16 @@ An analytical-first LLM inference performance predictor: model config + hardware
 
 ## Why this exists
 
-Existing tools (Vidur, LLMServingSim, TokenSim) all need to profile on the actual target hardware before they can predict anything:
+Worth being upfront about existing work here rather than setting up a strawman. Checked each of these against its own paper/repo rather than assuming:
 
-| | Vidur / LLMServingSim / TokenSim | This project |
-|---|---|---|
-| Method | profile on target hardware → ML interpolation → simulate | spec sheet → analytical derivation → light real-world calibration |
-| Precondition | must have the actual card | just the spec sheet |
-| Accuracy | high (Vidur reports <9% error) | lower, but honestly bounded |
-| Can predict hardware you don't have | No | Yes — B200, Rubin, unreleased cards |
-| Primary output | numbers + optimal config | **bottleneck attribution & decision boundaries** |
+| | [Vidur](https://arxiv.org/abs/2405.05465) | [LLMServingSim](https://arxiv.org/abs/2408.05499) | [TokenSim](https://arxiv.org/abs/2503.08415) | This project |
+|---|---|---|---|---|
+| Method | profile real HW → random-forest interpolation → simulate | profile real HW (vLLM-based layerwise profiler) → co-simulate compute + network | pluggable analytical compute simulators (e.g. [GenZ](https://arxiv.org/abs/2406.01698), [LLMCompass](https://ieeexplore.ieee.org/document/10609604/)) → event-driven simulation; can also fold in real profiling | spec sheet → closed-form analytical formulas → light real-world calibration |
+| Needs the actual card | Yes — interpolates within a GPU it has profiled, not shown to extrapolate to unprofiled hardware | Yes — takes real per-hardware profiling data as input | No, in its analytical mode — built to evaluate hardware it doesn't physically have | No |
+| Reported accuracy | <9% error (LLaMA2-7B/70B, InternLM-20B, Qwen-72B on A100/H100) | <14.7% error (paper); ~1% in a narrower single-GPU benchmark (RTX 4090, per its README) | ~0.1–0.6% vs. real vLLM (LLaMA2-7B on A100, ShareGPT traffic) | not yet calibrated against real hardware (M3, in progress) |
+| Primary output | latency/throughput numbers + optimal deployment config | latency/throughput numbers across heterogeneous HW pools | latency/throughput numbers, HW/SW design-space exploration | **bottleneck attribution & decision boundaries** |
 
-The trade: accuracy for coverage and explainability. This won't out-predict a real profiler on hardware you can already rent — it's for the hardware you can't (yet), and for understanding *why* a deployment is slow, not just how slow.
+So the honest pitch isn't "nobody else can predict hardware you don't have" — TokenSim, and the analytical compute simulators it wraps (GenZ: 5.82% geomean error, LLMCompass: ~4.1% error for LLM inference), already do that, and do it well. What this project actually bets on is being small enough to read end to end in one sitting — a handful of closed-form formulas over a yaml spec, no compute-simulator backend to wire up — and treating *why a deployment is slow*, not just how slow, as the primary output rather than something you'd have to dig out of a trace yourself.
 
 ## Status
 
