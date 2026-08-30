@@ -1,0 +1,7 @@
+model=Llama-3.1-8B  hw=H100 SXM 80GB  dtype=fp8  seed=1
+
+workload             static tok/s   continuous tok/s   improvement
+uniform-baseline           1512.0             3576.0        136.5%
+steady-agentic              730.0             2805.0        284.2%
+
+CONFIRMED: heavy-tailed traffic shows a larger continuous-batching improvement (284.2%) than uniform traffic (136.5%) -- uniform synthetic benchmarks understate continuous batching's value, as the roadmap's cited finding predicts.

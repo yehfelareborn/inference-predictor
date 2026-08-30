@@ -1,0 +1,16 @@
+name: Llama-3.1-Nemotron-70B
+# NVIDIA's alignment fine-tune of Llama-3.1-70B (reward-model/RLHF tuned for
+# instruction following) — NOT one of the NAS/Puzzle-pruned "Nemotron-Super"
+# or "Nemotron-Ultra" models, which use a heterogeneous per-block architecture
+# this schema can't represent. Confirmed architecturally identical to plain
+# llama3.1-70b.yaml via config.json (architectures: LlamaForCausalLM, uniform
+# per-layer heads, same params/layers/hidden_size). Source:
+# huggingface.co/nvidia/Llama-3.1-Nemotron-70B-Instruct-HF/raw/main/config.json
+params: 70.6e9
+layers: 80
+hidden_size: 8192
+n_heads: 64
+n_kv_heads: 8          # GQA
+head_dim: 128
+vocab_size: 128256
+moe: null

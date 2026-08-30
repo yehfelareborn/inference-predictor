@@ -1,0 +1,9 @@
+name: Qwen2.5-7B
+params: 7.61e9
+layers: 28
+hidden_size: 3584
+n_heads: 28
+n_kv_heads: 4          # GQA, narrower ratio than Llama-3.1
+head_dim: 128
+vocab_size: 152064
+moe: null

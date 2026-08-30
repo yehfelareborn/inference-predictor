@@ -1,0 +1,47 @@
+name: Nemotron-Nano-9B-v2
+# Hybrid Mamba-2/Transformer architecture (model_type: nemotron_h), NOT a
+# uniform transformer. Exact layer breakdown from `hybrid_override_pattern`
+# in config.json (56 chars, legend M=Mamba-2, *=attention, -=MLP-only):
+# M-M-M-MM-M-M-M*-M-M-M*-M-M-M-M*-M-M-M-M*-M-MM-M-M-M-M-M-
+#   -> 27 Mamba-2, 4 attention, 25 MLP-only (sums to 56).
+# MLP-only layers hold no state at all and don't appear anywhere below.
+#
+# `layers`/`n_kv_heads`/`head_dim` represent the 4 real attention layers only
+# (kv_per_token_bytes() covers those). `state_layers` below covers the 27
+# Mamba-2 layers' own fixed-size recurrent state, which does NOT grow with
+# context length -- unlike a real KV cache. Together these make this
+# project's first real (not underestimated) capacity prediction for a
+# hybrid architecture.
+#
+# Mamba-2 state = ssm_state + conv_state, both fp32 (Mamba's numerical-
+# stability convention, independent of --kv-dtype -- hence state_dtype:
+# fixed_fp32 below):
+#   config: mamba_num_heads=128, mamba_head_dim=80, mamba_num_groups=8,
+#           mamba_state_dim=128, d_inner=num_heads*head_dim=10240
+#   ssm_state elements  = num_heads * head_dim * state_dim = 128*80*128 = 1,310,720
+#   conv_state elements = (d_inner + 2*n_groups*state_dim) * (conv_kernel-1)
+#                       = (10240 + 2*8*128) * 3 = 12288*3 = 36,864
+#   total per layer     = 1,347,584 elements
+# conv_kernel_size used as 4 (Mamba-2's near-universal default across every
+# published checkpoint) -- not a directly-quoted field for this specific
+# repo, medium-high confidence by strong convention rather than a pinned
+# source line. Shape formula matches transformers' Mamba2 config attribute
+# names, though the literal torch.zeros(...) allocation call itself wasn't
+# recoverable from the current refactored source -- standard/stable
+# convention, not a fresh line-by-line reproduction.
+#
+# Source: huggingface.co/nvidia/NVIDIA-Nemotron-Nano-9B-v2/raw/main/config.json,
+# arXiv:2508.14444 (Nemotron-H technical report),
+# transformers/models/mamba2/modeling_mamba2.py (state shape convention)
+params: 9e9
+layers: 4              # real self-attention layers only, see breakdown above — NOT 56
+hidden_size: 4480
+n_heads: 40
+n_kv_heads: 8          # GQA, attention layers only
+head_dim: 128
+vocab_size: 131072
+moe: null
+state_layers:
+  count: 27                          # true Mamba-2 layers only, MLP-only excluded
+  state_elements_per_seq: 1347584    # ssm_state + conv_state, per layer, before dtype bytes
+  state_dtype: fixed_fp32            # always fp32 regardless of --kv-dtype -- see comment above

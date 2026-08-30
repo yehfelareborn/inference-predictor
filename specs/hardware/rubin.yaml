@@ -1,0 +1,14 @@
+name: Rubin R200 288GB
+# Secondary-source numbers as of Aug 2026 (NVIDIA hasn't published a full
+# datasheet reviewed for this project yet; ships to hyperscalers H2 2026).
+# Nobody on this project has touched one — same "predict what you can't rent"
+# case as b200.yaml, just one generation further out.
+memory_gb: 288
+memory_bandwidth_gbs: 22000     # HBM4
+peak_flops:
+  bf16: null        # not found in public sources at time of writing — don't guess
+  fp8: 16000e12     # ~16 PFLOPS/GPU quoted by secondary sources; dense-vs-sparse not confirmed, treat this one as lower-confidence than h100/b200
+interconnect:
+  type: nvlink
+  bandwidth_gbs: 3600   # NVLink 6, ~2x B200's NVLink 5 (1800 GB/s)
+pcie_gbs: null      # not confirmed in public sources

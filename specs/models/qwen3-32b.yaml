@@ -1,0 +1,9 @@
+name: Qwen3-32B
+params: 32.8e9
+layers: 64
+hidden_size: 5120
+n_heads: 64
+n_kv_heads: 8          # key field for GQA
+head_dim: 128
+vocab_size: 151936
+moe: null              # or {n_experts: 8, n_active: 2}

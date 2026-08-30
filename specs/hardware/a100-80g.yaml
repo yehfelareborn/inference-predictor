@@ -1,0 +1,10 @@
+name: A100 SXM 80GB
+memory_gb: 80
+memory_bandwidth_gbs: 2039
+peak_flops:
+  bf16: 312e12
+  fp8: null        # Ampere has no native FP8 tensor core, unlike Hopper/Ada
+interconnect:
+  type: nvlink
+  bandwidth_gbs: 600
+pcie_gbs: 64

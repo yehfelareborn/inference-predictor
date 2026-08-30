@@ -1,0 +1,12 @@
+name: GLM-4-9B
+# Nominal "9B" only, no exact param count published — same caveat as
+# glm-4-32b.yaml. Source:
+# huggingface.co/zai-org/GLM-4-9B-0414/raw/main/config.json
+params: 9e9
+layers: 40
+hidden_size: 4096
+n_heads: 32
+n_kv_heads: 2          # GQA
+head_dim: 128
+vocab_size: 151552
+moe: null

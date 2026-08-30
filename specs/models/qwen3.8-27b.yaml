@@ -1,0 +1,56 @@
+name: Qwen3.8-27B
+# Hybrid Gated-DeltaNet/full-attention architecture, NOT a uniform
+# transformer -- same class of problem as nemotron-nano-9b.yaml, different
+# mechanism, no MLP-only layer type here. Layout per config
+# (full_attention_interval=4) and model card "16 x (3 x (Gated DeltaNet ->
+# FFN) -> 1 x (Gated Attention -> FFN))": of 64 total decoder blocks, 16 are
+# real full-attention ("Gated Attention") layers, 48 are Gated DeltaNet
+# linear-attention layers.
+#
+# `layers`/`n_kv_heads`/`head_dim` represent the 16 real attention layers
+# only (kv_per_token_bytes() covers those). `state_layers` below covers the
+# 48 Gated DeltaNet layers' own fixed-size recurrent state, which does NOT
+# grow with context length -- unlike a real KV cache.
+#
+# Gated DeltaNet state, quoted directly from
+# transformers/models/qwen3_next/modeling_qwen3_next.py
+# (torch_recurrent_gated_delta_rule):
+#   recurrent_state_shape = (batch_size, num_v_heads, k_head_dim, v_head_dim)
+#   last_recurrent_state = torch.zeros(recurrent_state_shape, dtype=value.dtype, ...)
+# i.e. state count follows num_v_heads (the LARGER of the two head counts,
+# not num_k_heads), and -- unlike Mamba-2's always-fp32 convention -- the
+# dtype tracks the model's own compute dtype at runtime. This project has no
+# separate "activation dtype" lever, so state_dtype: kv_dtype below
+# approximates it by reusing --kv-dtype, the closest exposed knob; a real
+# serving engine may or may not actually tie DeltaNet state precision to the
+# attention KV cache's precision -- flagged, not silently assumed exact.
+#   config: linear_num_key_heads=16, linear_num_value_heads=48,
+#           linear_key_head_dim=128, linear_value_head_dim=128
+#   recurrent_state elements = num_v_heads * k_head_dim * v_head_dim
+#                            = 48 * 128 * 128 = 786,432
+# KNOWN GAP: DeltaNet also keeps a short causal-conv buffer
+# (linear_conv_kernel_dim=4 confirmed in config) whose channel-dimension
+# formula was NOT confirmed from source in this pass -- likely small next to
+# the 786,432-element recurrent state, but excluded rather than guessed, so
+# this entry's state size is a slight underestimate, not an exact one.
+#
+# Released 2026-08-14, after this project's own knowledge cutoff -- verified
+# via multiple independent fetches (HF repo raw config.json, model page, and
+# the transformers source above) that agreed on layer layout, hidden_size,
+# head counts, and vocab_size. The raw config.json fetch self-labels
+# `model_type: qwen3_5`, which may just be an internal codename Qwen kept
+# across the version bump; noted for anyone re-verifying rather than
+# silently smoothed over. Total param count (27.78B) is web-sourced, not
+# pulled from config.json directly.
+params: 27.78e9
+layers: 16             # real full-attention ("Gated Attention") layers only, see breakdown above -- NOT 64
+hidden_size: 5120
+n_heads: 24
+n_kv_heads: 4          # GQA, full-attention layers only
+head_dim: 256
+vocab_size: 248320
+moe: null
+state_layers:
+  count: 48                        # Gated DeltaNet layers only
+  state_elements_per_seq: 786432   # recurrent state only, conv buffer excluded (known gap, see comment above)
+  state_dtype: kv_dtype            # tracks compute dtype, approximated via --kv-dtype -- see comment above

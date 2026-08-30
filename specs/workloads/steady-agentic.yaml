@@ -1,0 +1,17 @@
+name: steady-agentic
+# Illustrative workload: moderate QPS, heavy-tailed (lognormal) input/output
+# lengths -- the shape real chat/agentic traffic actually has. Compare against
+# uniform-baseline.yaml (same means, zero variance) to see continuous
+# batching's benefit shrink under uniform synthetic traffic.
+arrival: poisson
+qps: 8
+input_len: {dist: lognormal, mean: 2048, sigma: 0.8}
+output_len: {dist: lognormal, mean: 512, sigma: 1.2}
+prefix_share: 0.35          # probability a request's prefill is a full cache hit (simplified model)
+
+scheduler:
+  policy: continuous_batching   # or static_batching
+  chunked_prefill: true
+  max_num_batched_tokens: 8192
+  max_num_seqs: 256
+  preemption: recompute         # or swap

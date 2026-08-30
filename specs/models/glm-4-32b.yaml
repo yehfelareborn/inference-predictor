@@ -1,0 +1,13 @@
+name: GLM-4-32B
+# No exact param count published (unlike e.g. qwen3-32b's 32.8e9) — only the
+# nominal "32B" is publicly stated, so this is lower-precision than other
+# entries. Source:
+# huggingface.co/zai-org/GLM-4-32B-0414/raw/main/config.json
+params: 32e9
+layers: 61
+hidden_size: 6144
+n_heads: 48
+n_kv_heads: 2          # GQA
+head_dim: 128
+vocab_size: 151552
+moe: null

@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+.venv/
+
+# private planning doc (job-search notes, work context) -- never push this
+inference-predictor-roadmap.md

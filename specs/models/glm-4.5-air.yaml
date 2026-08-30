@@ -1,0 +1,14 @@
+name: GLM-4.5-Air
+# Total params include all 128 routed experts. Source:
+# huggingface.co/zai-org/GLM-4.5-Air/raw/main/config.json
+params: 106e9
+layers: 46
+hidden_size: 4096
+n_heads: 96
+n_kv_heads: 8          # GQA
+head_dim: 128
+vocab_size: 151552
+# top-8 routing over 128 experts (~12B active params/token). Same known
+# simplification as glm-4.5.yaml: 1 shared expert and first_k_dense_replace
+# not represented in this schema.
+moe: {n_experts: 128, n_active: 8}

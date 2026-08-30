@@ -1,0 +1,9 @@
+name: Mixtral-8x7B
+params: 46.7e9         # total, all 8 experts — weights occupy memory regardless of active count
+layers: 32
+hidden_size: 4096
+n_heads: 32
+n_kv_heads: 8          # GQA
+head_dim: 128
+vocab_size: 32000
+moe: {n_experts: 8, n_active: 2}   # active count unused by M0, reserved for M1 FLOPs

@@ -1,0 +1,17 @@
+name: uniform-baseline
+# Same QPS and mean lengths as steady-agentic.yaml, but sigma=0 (uniform,
+# no tail) -- for reproducing the roadmap's claim that uniform-length
+# synthetic traffic underestimates continuous batching's value, because it
+# hides the heavy-tailed distribution that causes head-of-line blocking.
+arrival: poisson
+qps: 8
+input_len: {dist: lognormal, mean: 2048, sigma: 0.0}
+output_len: {dist: lognormal, mean: 512, sigma: 0.0}
+prefix_share: 0.35
+
+scheduler:
+  policy: continuous_batching
+  chunked_prefill: true
+  max_num_batched_tokens: 8192
+  max_num_seqs: 256
+  preemption: recompute

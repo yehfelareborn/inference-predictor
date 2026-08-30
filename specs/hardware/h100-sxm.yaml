@@ -1,0 +1,10 @@
+name: H100 SXM 80GB
+memory_gb: 80
+memory_bandwidth_gbs: 3350
+peak_flops:
+  bf16: 990e12
+  fp8: 1979e12
+interconnect:
+  type: nvlink
+  bandwidth_gbs: 900
+pcie_gbs: 64

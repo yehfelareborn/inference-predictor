@@ -1,0 +1,14 @@
+name: B200 192GB
+# Public Blackwell datasheet numbers, dense (not "with sparsity" — matches the
+# convention used for h100-sxm.yaml/a100-80g.yaml). Nobody on this project has
+# touched a real B200, which is exactly the point of this tool: predict a card
+# you can't rent yet, then flag the prediction as unverified until proven otherwise.
+memory_gb: 192
+memory_bandwidth_gbs: 8000
+peak_flops:
+  bf16: 1125e12
+  fp8: 2250e12
+interconnect:
+  type: nvlink
+  bandwidth_gbs: 1800
+pcie_gbs: 128

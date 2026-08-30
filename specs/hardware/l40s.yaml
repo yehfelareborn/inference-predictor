@@ -1,0 +1,10 @@
+name: L40S 48GB
+memory_gb: 48
+memory_bandwidth_gbs: 864
+peak_flops:
+  bf16: 362e12
+  fp8: 733e12
+interconnect:
+  type: none        # no NVLink, multi-GPU comms go over PCIe — the key variable for finding-03
+  bandwidth_gbs: 0
+pcie_gbs: 64

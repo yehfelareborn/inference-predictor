@@ -1,0 +1,9 @@
+name: Qwen2.5-0.5B
+params: 0.494e9
+layers: 24
+hidden_size: 896
+n_heads: 14
+n_kv_heads: 2          # GQA
+head_dim: 64
+vocab_size: 151936
+moe: null

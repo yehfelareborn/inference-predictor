@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Inference Predictor — M0 Capacity Calculator</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg: #0f1420;
+    --panel: #161d2e;
+    --border: #2a3348;
+    --text: #e6e9f0;
+    --text-dim: #93a0b8;
+    --accent: #5b9dff;
+    --ok: #4caf7d;
+    --warn: #e0a53d;
+    --bad: #e0553d;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    padding: 24px;
+  }
+  .wrap { max-width: 1100px; margin: 0 auto; }
+  h1 { font-size: 1.4rem; margin: 0 0 4px; }
+  .subtitle { color: var(--text-dim); font-size: 0.9rem; margin: 0 0 20px; }
+  .layout { display: grid; grid-template-columns: 280px 1fr; gap: 20px; }
+  @media (max-width: 800px) { .layout { grid-template-columns: 1fr; } }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+  .panel + .panel { margin-top: 16px; }
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font-size: 0.8rem; color: var(--text-dim); margin-bottom: 4px; }
+  select, input[type=range] { width: 100%; }
+  select {
+    background: #0d1220; color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 6px 8px; font-size: 0.9rem;
+  }
+  .checks { display: flex; flex-direction: column; gap: 6px; }
+  .checks label { display: flex; align-items: center; gap: 6px; color: var(--text); font-size: 0.85rem; }
+  .range-value { font-size: 0.8rem; color: var(--accent); float: right; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+  th, td { text-align: right; padding: 5px 8px; border-bottom: 1px solid var(--border); }
+  th:first-child, td:first-child { text-align: left; }
+  .verdict-ok { color: var(--ok); }
+  .verdict-warn { color: var(--warn); }
+  .verdict-bad { color: var(--bad); }
+  svg { width: 100%; height: auto; display: block; }
+  .axis-label { fill: var(--text-dim); font-size: 11px; }
+  .grid-line { stroke: var(--border); stroke-dasharray: 3 3; }
+  .legend-item { font-size: 11px; }
+  footer { margin-top: 20px; color: var(--text-dim); font-size: 0.78rem; }
+  code { background: #0d1220; padding: 1px 5px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Inference Predictor — M0 Capacity Calculator</h1>
+  <p class="subtitle">Analytical memory accounting: does the model fit, and how many concurrent requests. No profiling required — spec sheet in, capacity curve out.</p>
+
+  <div class="layout">
+    <div>
+      <div class="panel">
+        <div class="field">
+          <label>Hardware</label>
+          <select id="hw"></select>
+        </div>
+        <div class="field">
+          <label>Weight dtype</label>
+          <select id="weightDtype">
+            <option>fp8</option><option>fp16</option><option>bf16</option><option>fp32</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>KV cache dtype</label>
+          <select id="kvDtype">
+            <option>fp16</option><option>bf16</option><option>fp8</option><option>fp32</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Tensor parallel (tp) <span class="range-value" id="tpVal">1</span></label>
+          <input type="range" id="tp" min="0" max="3" step="1" value="0">
+        </div>
+        <div class="field">
+          <label>Workspace reserve <span class="range-value" id="wsVal">4 GB</span></label>
+          <input type="range" id="workspace" min="0" max="16" step="1" value="4">
+        </div>
+        <div class="field">
+          <label>Models (overlaid on chart)</label>
+          <div class="checks" id="modelChecks"></div>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="panel">
+        <svg id="chart" viewBox="0 0 760 440"></svg>
+      </div>
+      <div class="panel">
+        <table id="breakdown"></table>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    Formulas mirror <code>core/memory.py</code> exactly (M0: pure memory accounting, no timing model yet).
+    Serve this directory over http (e.g. <code>python3 -m http.server</code> from <code>web/</code>) rather than opening the file directly — the browser blocks <code>fetch()</code> on <code>file://</code>.
+  </footer>
+</div>
+
+<script>
+const DTYPE_BYTES = { fp32: 4, fp16: 2, bf16: 2, fp8: 1, int8: 1 };
+const TP_VALUES = [1, 2, 4, 8];
+const SEQ_LENS = Array.from({length: 8}, (_, k) => 2 ** (k + 10)); // 1K..128K
+const COLORS = ["#5b9dff", "#e0a53d", "#4caf7d", "#e0553d", "#b57bee"];
+
+let SPECS = null;
+
+function weightsGB(model, weightDtype, tp) {
+  return model.params * DTYPE_BYTES[weightDtype] / tp / 1e9;
+}
+function kvPerTokenBytes(model, kvDtype, tp) {
+  return 2 * model.layers * model.n_kv_heads * model.head_dim * DTYPE_BYTES[kvDtype] / tp;
+}
+function usableKvGB(hw, wGB, workspaceGB) {
+  return hw.memory_gb - wGB - workspaceGB;
+}
+function maxConcurrency(usableGB, kvBpt, seqLen) {
+  if (usableGB <= 0) return 0;
+  return Math.floor(usableGB * 1e9 / (kvBpt * seqLen));
+}
+function seqLabel(s) {
+  return s >= 1024 ? `${s / 1024}K` : `${s}`;
+}
+
+function populateControls() {
+  const hwSel = document.getElementById("hw");
+  SPECS.hardware.forEach(hw => {
+    const opt = document.createElement("option");
+    opt.value = hw._id; opt.textContent = hw.name;
+    hwSel.appendChild(opt);
+  });
+  hwSel.value = "h100-sxm";
+
+  const checks = document.getElementById("modelChecks");
+  SPECS.models.forEach((m, i) => {
+    const label = document.createElement("label");
+    const cb = document.createElement("input");
+    cb.type = "checkbox"; cb.value = m._id; cb.checked = i < 2;
+    cb.addEventListener("change", render);
+    label.appendChild(cb);
+    label.appendChild(document.createTextNode(m.name));
+    checks.appendChild(label);
+  });
+
+  document.getElementById("tp").addEventListener("input", () => {
+    document.getElementById("tpVal").textContent = TP_VALUES[document.getElementById("tp").value];
+    render();
+  });
+  document.getElementById("workspace").addEventListener("input", () => {
+    document.getElementById("wsVal").textContent = document.getElementById("workspace").value + " GB";
+    render();
+  });
+  ["hw", "weightDtype", "kvDtype"].forEach(id =>
+    document.getElementById(id).addEventListener("change", render)
+  );
+}
+
+function selectedModels() {
+  return Array.from(document.querySelectorAll("#modelChecks input:checked")).map(cb =>
+    SPECS.models.find(m => m._id === cb.value)
+  );
+}
+
+function currentConfig() {
+  const hw = SPECS.hardware.find(h => h._id === document.getElementById("hw").value);
+  const weightDtype = document.getElementById("weightDtype").value;
+  const kvDtype = document.getElementById("kvDtype").value;
+  const tp = TP_VALUES[document.getElementById("tp").value];
+  const workspaceGB = Number(document.getElementById("workspace").value);
+  return { hw, weightDtype, kvDtype, tp, workspaceGB };
+}
+
+function renderBreakdown(models, cfg) {
+  const { hw, weightDtype, kvDtype, tp, workspaceGB } = cfg;
+  let html = "<tr><th>model</th><th>weights</th><th>usable KV</th><th>KV/token</th><th>8K</th><th>32K</th><th>128K</th><th>verdict</th></tr>";
+  models.forEach(model => {
+    const wGB = weightsGB(model, weightDtype, tp);
+    const kvBpt = kvPerTokenBytes(model, kvDtype, tp);
+    const usableGB = usableKvGB(hw, wGB, workspaceGB);
+    const c8 = maxConcurrency(usableGB, kvBpt, 8192);
+    const c32 = maxConcurrency(usableGB, kvBpt, 32768);
+    const c128 = maxConcurrency(usableGB, kvBpt, 131072);
+    let verdictClass = "verdict-ok", verdict = "deployable";
+    if (usableGB <= 0) { verdictClass = "verdict-bad"; verdict = "does not fit"; }
+    else if (c8 === 0 || c32 === 0 || c128 === 0) { verdictClass = "verdict-warn"; verdict = "partial (0 at some context)"; }
+    html += `<tr><td>${model.name}</td><td>${wGB.toFixed(1)} GB</td><td>${usableGB.toFixed(1)} GB</td>` +
+            `<td>${(kvBpt/1024).toFixed(1)} KB</td><td>${c8}</td><td>${c32}</td><td>${c128}</td>` +
+            `<td class="${verdictClass}">${verdict}</td></tr>`;
+  });
+  document.getElementById("breakdown").innerHTML = html;
+}
+
+function renderChart(models, cfg) {
+  const { hw, weightDtype, kvDtype, tp, workspaceGB } = cfg;
+  const svg = document.getElementById("chart");
+  const W = 760, H = 440, padL = 56, padR = 20, padT = 20, padB = 40;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+
+  const xMin = Math.log2(SEQ_LENS[0]), xMax = Math.log2(SEQ_LENS[SEQ_LENS.length - 1]);
+  // y domain: fixed 2^0 .. 2^9 covers the realistic concurrency range for these specs
+  const yMin = 0, yMax = 9;
+
+  const xPix = v => padL + (Math.log2(v) - xMin) / (xMax - xMin) * plotW;
+  const yPix = v => padT + plotH - (Math.max(Math.log2(Math.max(v, 1)), yMin)) / (yMax - yMin) * plotH;
+
+  let svgParts = [];
+  // grid + axes
+  for (let gx = xMin; gx <= xMax; gx++) {
+    const px = padL + (gx - xMin) / (xMax - xMin) * plotW;
+    svgParts.push(`<line class="grid-line" x1="${px}" y1="${padT}" x2="${px}" y2="${padT+plotH}" />`);
+    svgParts.push(`<text class="axis-label" x="${px}" y="${padT+plotH+18}" text-anchor="middle">2^${gx}</text>`);
+  }
+  for (let gy = yMin; gy <= yMax; gy += 1) {
+    const py = padT + plotH - gy / (yMax - yMin) * plotH;
+    svgParts.push(`<line class="grid-line" x1="${padL}" y1="${py}" x2="${padL+plotW}" y2="${py}" />`);
+    svgParts.push(`<text class="axis-label" x="${padL-8}" y="${py+4}" text-anchor="end">2^${gy}</text>`);
+  }
+  svgParts.push(`<text class="axis-label" x="${padL+plotW/2}" y="${H-4}" text-anchor="middle">context length (tokens)</text>`);
+  svgParts.push(`<text class="axis-label" transform="translate(14,${padT+plotH/2}) rotate(-90)" text-anchor="middle">max concurrent requests</text>`);
+
+  let cutoffLabelIdx = 0;
+  models.forEach((model, i) => {
+    const color = COLORS[i % COLORS.length];
+    const wGB = weightsGB(model, weightDtype, tp);
+    const kvBpt = kvPerTokenBytes(model, kvDtype, tp);
+    const usableGB = usableKvGB(hw, wGB, workspaceGB);
+    const points = SEQ_LENS.map(s => ({ s, c: maxConcurrency(usableGB, kvBpt, s) }));
+
+    let pathD = "";
+    let started = false;
+    let cutoff = null;
+    points.forEach(({ s, c }) => {
+      if (c === 0) { if (cutoff === null) cutoff = s; return; }
+      const cmd = started ? "L" : "M";
+      pathD += `${cmd}${xPix(s).toFixed(1)},${yPix(c).toFixed(1)} `;
+      started = true;
+    });
+    if (pathD) svgParts.push(`<path d="${pathD}" fill="none" stroke="${color}" stroke-width="2" />`);
+    points.forEach(({ s, c }) => {
+      if (c === 0) return;
+      svgParts.push(`<circle cx="${xPix(s).toFixed(1)}" cy="${yPix(c).toFixed(1)}" r="3.5" fill="${color}" />`);
+    });
+    if (cutoff !== null) {
+      const cx = xPix(cutoff);
+      svgParts.push(`<line x1="${cx}" y1="${padT}" x2="${cx}" y2="${padT+plotH}" stroke="${color}" stroke-dasharray="4 3" opacity="0.6" />`);
+      // Stacked bottom-left, not anchored to the line itself — the line can land
+      // anywhere on the x-axis (including right under the top-right legend), so
+      // tying the label's position to it caused text collisions there.
+      svgParts.push(`<text class="axis-label" x="${padL+8}" y="${padT+plotH-8-cutoffLabelIdx*14}" fill="${color}">${model.name}: 0 capacity ≥ ${seqLabel(cutoff)}</text>`);
+      cutoffLabelIdx++;
+    }
+    svgParts.push(`<circle cx="${padL+plotW-8}" cy="${padT+10+i*16}" r="4" fill="${color}" />`);
+    svgParts.push(`<text class="legend-item axis-label" x="${padL+plotW-16}" y="${padT+14+i*16}" text-anchor="end">${model.name}</text>`);
+  });
+
+  svg.innerHTML = svgParts.join("\n");
+}
+
+function render() {
+  const cfg = currentConfig();
+  const models = selectedModels();
+  document.getElementById("tpVal").textContent = cfg.tp;
+  if (models.length === 0) {
+    document.getElementById("breakdown").innerHTML = "<tr><td>select at least one model</td></tr>";
+    document.getElementById("chart").innerHTML = "";
+    return;
+  }
+  renderBreakdown(models, cfg);
+  renderChart(models, cfg);
+}
+
+fetch("specs.json")
+  .then(r => r.json())
+  .then(data => { SPECS = data; populateControls(); render(); })
+  .catch(err => {
+    document.body.innerHTML = `<p style="color:#e0553d">Failed to load specs.json — serve this directory over http (e.g. <code>python3 -m http.server</code> from <code>web/</code>), don't open the file directly.<br>${err}</p>`;
+  });
+</script>
+</body>
+</html>

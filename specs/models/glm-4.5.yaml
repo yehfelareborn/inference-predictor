@@ -1,0 +1,16 @@
+name: GLM-4.5
+# Total params include all 160 routed experts; weights occupy memory
+# regardless of active count. Source:
+# huggingface.co/zai-org/GLM-4.5/raw/main/config.json
+params: 355e9
+layers: 92
+hidden_size: 5120
+n_heads: 96
+n_kv_heads: 8          # GQA
+head_dim: 128
+vocab_size: 151552
+# top-8 routing over 160 experts (~32B active params/token). Config also has
+# 1 shared expert and first_k_dense_replace=3 (first 3 layers are dense, not
+# MoE) — neither fits this schema. Known simplification, not a full model of
+# the architecture.
+moe: {n_experts: 160, n_active: 8}
