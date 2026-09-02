@@ -1,0 +1,30 @@
+name: RTX 3070 Laptop 8GB
+# Local M3 calibration rig only -- not a showcase card. Confirmed via
+# nvidia-smi on this machine: 8GB, compute_cap 8.6 (Ampere, same generation
+# as A100 -- no native FP8 tensor core), power.max_limit 85W (the lowest
+# published TGP tier for this chip; laptop variants span 80-125W and vendors
+# rarely publish exact TFLOPS per tier).
+#
+# memory_bandwidth_gbs: 448 GB/s is vendor-published and consistent across
+# every RTX 3070 Laptop power tier (only compute clocks change, not the
+# memory subsystem) -- high confidence.
+#
+# peak_flops.bf16: NOT vendor-confirmed for this specific 85W tier -- desktop
+# RTX 3070 FP16 dense tensor is ~20 TFLOPS at 220W; laptop 100W-tier FP32 is
+# published at 13.2-16.6 TFLOPS (vs desktop FP32 ~20.3 TFLOPS), suggesting
+# roughly 65-80% of desktop throughput at 100W, less at 85W. Estimated here
+# as ~44 TFLOPS bf16 dense (no sparsity) -- a rough scale-down, not a vendor
+# number. This is exactly the kind of imprecision M3's calibration is meant
+# to absorb: mfu_prefill/mbu_decode are fit against *this* peak_flops value,
+# so an error here shows up as a compensating shift in the fitted
+# coefficient, not as a wrong absolute prediction -- as long as this same
+# spec file is used consistently for both fitting and later prediction.
+memory_gb: 8
+memory_bandwidth_gbs: 448
+peak_flops:
+  bf16: 44e12
+  fp8: null        # Ampere has no native FP8 tensor core, same as a100-80g.yaml
+interconnect:
+  type: none        # single GPU, no multi-GPU calibration possible on this rig
+  bandwidth_gbs: 0
+pcie_gbs: 32        # PCIe 4.0 x8 (typical laptop GPU link), not vendor-confirmed for this exact unit

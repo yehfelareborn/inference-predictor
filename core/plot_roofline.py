@@ -13,12 +13,13 @@ from core.memory import DTYPE_BYTES, HardwareSpec, ModelSpec
 from core.roofline import compute_decode
 
 
-def sweep(model, hw, weight_dtype, kv_dtype, comm_dtype, tp, context_length, mfu, mbu, batches):
+def sweep(model, hw, weight_dtype, kv_dtype, comm_dtype, tp, context_length, mfu, mbu_weights, mbu_kv, batches):
     tpot_ms, throughput, statuses = [], [], []
     for b in batches:
         r = compute_decode(
             model, hw, int(b), context_length,
-            weight_dtype=weight_dtype, kv_dtype=kv_dtype, comm_dtype=comm_dtype, tp=tp, mfu=mfu, mbu=mbu,
+            weight_dtype=weight_dtype, kv_dtype=kv_dtype, comm_dtype=comm_dtype, tp=tp,
+            mfu=mfu, mbu_weights=mbu_weights, mbu_kv=mbu_kv,
         )
         tpot_ms.append(r.predicted_time_s * 1e3)
         throughput.append(r.throughput_tokens_s)
@@ -26,12 +27,14 @@ def sweep(model, hw, weight_dtype, kv_dtype, comm_dtype, tp, context_length, mfu
     return np.array(tpot_ms), np.array(throughput), statuses
 
 
-def plot(model_name, hw_name, weight_dtype, kv_dtype, comm_dtype, tp, context_length, mfu, mbu, out_path):
+def plot(model_name, hw_name, weight_dtype, kv_dtype, comm_dtype, tp, context_length, mfu, mbu_weights, mbu_kv, out_path):
     model = ModelSpec.load(model_name)
     hw = HardwareSpec.load(hw_name)
     batches = np.array([2**k for k in range(0, 13)])  # 1 ~ 4096
 
-    tpot_ms, throughput, statuses = sweep(model, hw, weight_dtype, kv_dtype, comm_dtype, tp, context_length, mfu, mbu, batches)
+    tpot_ms, throughput, statuses = sweep(
+        model, hw, weight_dtype, kv_dtype, comm_dtype, tp, context_length, mfu, mbu_weights, mbu_kv, batches
+    )
 
     fig, ax1 = plt.subplots(figsize=(8, 5))
     ax2 = ax1.twinx()
@@ -88,11 +91,15 @@ def main():
     parser.add_argument("--tp", type=int, default=1)
     parser.add_argument("--context-length", type=int, default=4096)
     parser.add_argument("--mfu", type=float, default=0.5)
-    parser.add_argument("--mbu", type=float, default=0.8)
+    parser.add_argument("--mbu-weights", type=float, default=0.8)
+    parser.add_argument("--mbu-kv", type=float, default=0.8)
     parser.add_argument("--out", default="roofline-decode.png")
     args = parser.parse_args()
 
-    plot(args.model, args.hw, args.dtype, args.kv_dtype, args.comm_dtype, args.tp, args.context_length, args.mfu, args.mbu, args.out)
+    plot(
+        args.model, args.hw, args.dtype, args.kv_dtype, args.comm_dtype, args.tp, args.context_length,
+        args.mfu, args.mbu_weights, args.mbu_kv, args.out,
+    )
 
 
 if __name__ == "__main__":
